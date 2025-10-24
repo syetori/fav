@@ -24,7 +24,7 @@ header{
 #playfield{
   position:relative;
   height:calc(100vh - 250px);
-  z-index:5; /* фрукты/овощи */
+  z-index:5;
 }
 .basket{
   position:absolute;
@@ -33,7 +33,7 @@ header{
   background:url('https://videos.openai.com/az/vg-assets/task_01k8b6ypkye58tq4r4mtxh0rk4%2F1761313029_img_1.webp?se=2025-10-30T13%3A39%3A24Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A28%3A31Z&ske=2025-10-31T05%3A33%3A31Z&sks=b&skv=2024-08-04&sig=SEF5wI90w/%2Bh5gA8EP21q8b0mLHDOqTcfaBKKb3udlg%3D&ac=oaivgprodscus2')
   no-repeat center/contain;
   bottom:0;
-  z-index:0; /* корзины ПОД всем */
+  z-index:0;
   pointer-events:none;
   background-position:center 70%;
 }
@@ -46,7 +46,7 @@ header{
   cursor:grab;
   user-select:none;
   touch-action:none;
-  z-index:10; /* выше корзин */
+  z-index:10;
   transition:transform .1s;
 }
 .item.dragging{z-index:1000;transform:scale(1.1);}
@@ -64,23 +64,30 @@ header{
 #vegEmoji{left:calc(50% - 210px)}
 #fruitEmoji{right:calc(50% - 210px)}
 
-/* Кнопка звука */
+/* Кнопка звука-иконка (PNG) */
 #soundBtn{
   position:absolute; right:10px; top:3px; z-index:20;
   background:transparent; border:0; padding:0; cursor:pointer;
+  font-size:0; line-height:0; /* чтобы случайный текст не появлялся */
 }
 #soundIcon{
-  width:48px; height:48px;            /* можно 40–56px */
-  display:block; object-fit:contain;   /* PNG с прозрачностью ок */
+  width:48px; height:48px;
+  display:block; object-fit:contain;
 }
 #soundBtn:active{transform:scale(.98)}
+
+/* Анимация заголовка победы */
+@keyframes pulse {
+  0%,100% { transform:scale(1); }
+  50% { transform:scale(1.05); }
+}
 </style>
 </head>
 <body>
 <header>Жемістер мен көкөністерді дұрыс себетке сал
   <button id="soundBtn" aria-pressed="false" title="Звук: вкл/выкл">
-  <img id="soundIcon" alt="Звук включен" />
-</button>
+    <img id="soundIcon" alt="Звук включен" />
+  </button>
 </header>
 
 <div id="playfield"></div>
@@ -89,24 +96,36 @@ header{
 <div id="vegEmoji" class="emoji">🥔</div>
 <div id="fruitEmoji" class="emoji">🍎</div>
 
-<!-- корзины теперь отдельным фоном, под всеми -->
+<!-- корзины -->
 <div id="basket-veg" class="basket" data-accept="veg"></div>
 <div id="basket-fruit" class="basket" data-accept="fruit"></div>
 
+<!-- Финальное окно -->
+<div id="winScreen" style="
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.8);
+  display:none; flex-direction:column;
+  justify-content:center; align-items:center;
+  z-index:9999; color:#fff; text-align:center;
+  font-family:sans-serif;">
+  <h1 id="winTitle" style="
+    font-size:96px;
+    text-shadow:0 0 25px gold;
+    margin-bottom:40px;
+    animation: pulse 1.5s infinite;">🎉 ЖЕҢІС! 🎉</h1>
+  <button id="restartBtn" style="
+    background:linear-gradient(45deg,#ffcc00,#ffaa00);
+    color:#000;font-size:28px;
+    font-weight:bold;
+    border:none;border-radius:16px;
+    padding:12px 32px;cursor:pointer;
+    box-shadow:0 0 12px rgba(255,200,0,0.6);
+    transition:transform .2s;">Қайтадан ойнау</button>
+</div>
+
 <script>
 /* ---------- ДАННЫЕ ---------- */
-const ITEMS = [
-  { name:'Яблоко', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8b83sjgewf8mxv742jn45cg%2F1761314275_img_1.webp?se=2025-10-30T14%3A00%3A55Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A28%3A39Z&ske=2025-10-31T05%3A33%3A39Z&sks=b&skv=2024-08-04&sig=uc2EAjhNCPPJiM2%2B8cTI%2Bx6jD8SLnq5uT4hzXSIeSXc%3D&ac=oaivgprodscus2' },
-  { name:'Банан', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8b8d2aqfqhtm55pfpj1ghnd%2F1761314571_img_1.webp?se=2025-10-30T14%3A28%3A32Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A26%3A42Z&ske=2025-10-31T05%3A31%3A42Z&sks=b&skv=2024-08-04&sig=bne9TpWVzXlx1e7VdHDk39GkeQiEO7NNnlWNKsZZHP0%3D&ac=oaivgprodscus2' },
-  { name:'Виноград', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8b9z02jek88tr7ypmsmase2%2F1761316219_img_0.webp?se=2025-10-30T14%3A32%3A00Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A31%3A32Z&ske=2025-10-31T05%3A36%3A32Z&sks=b&skv=2024-08-04&sig=mRZX1ivQ%2B8ALwYS2d5XHuq2rVif4jrAboF8e%2BHNipCU%3D&ac=oaivgprodscus2' },
-  { name:'Клубника', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8ba5f9be1yrx204ybc8h87x%2F1761316424_img_0.webp?se=2025-10-30T14%3A34%3A21Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A31%3A10Z&ske=2025-10-31T05%3A36%3A10Z&sks=b&skv=2024-08-04&sig=xgtKxzNDimZTEghYQmHWthhp1hTGIeKaO9STnNNw5XU%3D&ac=oaivgprodscus2' },
-  { name:'Апельсин', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8baad7xf208vnmp6x955n0a%2F1761316580_img_1.webp?se=2025-10-30T14%3A36%3A59Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A27%3A33Z&ske=2025-10-31T05%3A32%3A33Z&sks=b&skv=2024-08-04&sig=ifjjQn475DOR800sVRyFvCimJabVsM05hIdsabIeQuI%3D&ac=oaivgprodscus2' },
-  { name:'Морковь', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8bae9nfeeab0n6k84evk2v7%2F1761316719_img_0.webp?se=2025-10-30T14%3A38%3A48Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A28%3A44Z&ske=2025-10-31T05%3A33%3A44Z&sks=b&skv=2024-08-04&sig=us9G895tzz7PNI9kNDdH9HGzInyQqu2B4bKT5DE342E%3D&ac=oaivgprodscus2' },
-  { name:'Брокколи', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8baj8ezfh5a3cravpgy0y50%2F1761316846_img_0.webp?se=2025-10-30T14%3A40%3A48Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A27%3A32Z&ske=2025-10-31T05%3A32%3A32Z&sks=b&skv=2024-08-04&sig=qG84CgkAQfk/80pthdQTy4V/LY0k5hxnL2ct%2Bj4BDK4%3D&ac=oaivgprodscus2' },
-  { name:'Картофель', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8bazfbtet7rrck0435ke03f%2F1761317278_img_1.webp?se=2025-10-30T14%3A48%3A26Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A31%3A00Z&ske=2025-10-31T05%3A36%3A00Z&sks=b&skv=2024-08-04&sig=OXqb4GgrJKwzpdHtgFcYhRvokIEyKaEgSnFT/8JfbHI%3D&ac=oaivgprodscus2' },
-  { name:'Баклажан', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8bb3q80f5cbc8582rkt8rn4%2F1761317411_img_1.webp?se=2025-10-30T14%3A50%3A14Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A27%3A31Z&ske=2025-10-31T05%3A32%3A31Z&sks=b&skv=2024-08-04&sig=MUh1i23VM4NgW3yScMl1YKCSnds54rAvUNM3rw1YlLI%3D&ac=oaivgprodscus2' },
-  { name:'Кукуруза', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8bb6p14ex5sdp24a5m2hw9r%2F1761317521_img_0.webp?se=2025-10-30T14%3A52%3A35Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A31%3A01Z&ske=2025-10-31T05%3A36%3A01Z&sks=b&skv=2024-08-04&sig=HmrT/HjNFXrsk4m120Jh%2BHBaoWqYOkBnHgFOhqAIesw%3D&ac=oaivgprodscus2' }
-];
+const ITEMS = [ { name:'Яблоко', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8b83sjgewf8mxv742jn45cg%2F1761314275_img_1.webp?se=2025-10-30T14%3A00%3A55Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A28%3A39Z&ske=2025-10-31T05%3A33%3A39Z&sks=b&skv=2024-08-04&sig=uc2EAjhNCPPJiM2%2B8cTI%2Bx6jD8SLnq5uT4hzXSIeSXc%3D&ac=oaivgprodscus2' }, { name:'Банан', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8b8d2aqfqhtm55pfpj1ghnd%2F1761314571_img_1.webp?se=2025-10-30T14%3A28%3A32Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A26%3A42Z&ske=2025-10-31T05%3A31%3A42Z&sks=b&skv=2024-08-04&sig=bne9TpWVzXlx1e7VdHDk39GkeQiEO7NNnlWNKsZZHP0%3D&ac=oaivgprodscus2' }, { name:'Виноград', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8b9z02jek88tr7ypmsmase2%2F1761316219_img_0.webp?se=2025-10-30T14%3A32%3A00Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A31%3A32Z&ske=2025-10-31T05%3A36%3A32Z&sks=b&skv=2024-08-04&sig=mRZX1ivQ%2B8ALwYS2d5XHuq2rVif4jrAboF8e%2BHNipCU%3D&ac=oaivgprodscus2' }, { name:'Клубника', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8ba5f9be1yrx204ybc8h87x%2F1761316424_img_0.webp?se=2025-10-30T14%3A34%3A21Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A31%3A10Z&ske=2025-10-31T05%3A36%3A10Z&sks=b&skv=2024-08-04&sig=xgtKxzNDimZTEghYQmHWthhp1hTGIeKaO9STnNNw5XU%3D&ac=oaivgprodscus2' }, { name:'Апельсин', type:'fruit', img:'https://videos.openai.com/az/vg-assets/task_01k8baad7xf208vnmp6x955n0a%2F1761316580_img_1.webp?se=2025-10-30T14%3A36%3A59Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A27%3A33Z&ske=2025-10-31T05%3A32%3A33Z&sks=b&skv=2024-08-04&sig=ifjjQn475DOR800sVRyFvCimJabVsM05hIdsabIeQuI%3D&ac=oaivgprodscus2' }, { name:'Морковь', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8bae9nfeeab0n6k84evk2v7%2F1761316719_img_0.webp?se=2025-10-30T14%3A38%3A48Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A28%3A44Z&ske=2025-10-31T05%3A33%3A44Z&sks=b&skv=2024-08-04&sig=us9G895tzz7PNI9kNDdH9HGzInyQqu2B4bKT5DE342E%3D&ac=oaivgprodscus2' }, { name:'Брокколи', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8baj8ezfh5a3cravpgy0y50%2F1761316846_img_0.webp?se=2025-10-30T14%3A40%3A48Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A27%3A32Z&ske=2025-10-31T05%3A32%3A32Z&sks=b&skv=2024-08-04&sig=qG84CgkAQfk/80pthdQTy4V/LY0k5hxnL2ct%2Bj4BDK4%3D&ac=oaivgprodscus2' }, { name:'Картофель', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8bazfbtet7rrck0435ke03f%2F1761317278_img_1.webp?se=2025-10-30T14%3A48%3A26Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A31%3A00Z&ske=2025-10-31T05%3A36%3A00Z&sks=b&skv=2024-08-04&sig=OXqb4GgrJKwzpdHtgFcYhRvokIEyKaEgSnFT/8JfbHI%3D&ac=oaivgprodscus2' }, { name:'Баклажан', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8bb3q80f5cbc8582rkt8rn4%2F1761317411_img_1.webp?se=2025-10-30T14%3A50%3A14Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A27%3A31Z&ske=2025-10-31T05%3A32%3A31Z&sks=b&skv=2024-08-04&sig=MUh1i23VM4NgW3yScMl1YKCSnds54rAvUNM3rw1YlLI%3D&ac=oaivgprodscus2' }, { name:'Кукуруза', type:'veg', img:'https://videos.openai.com/az/vg-assets/task_01k8bb6p14ex5sdp24a5m2hw9r%2F1761317521_img_0.webp?se=2025-10-30T14%3A52%3A35Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T05%3A31%3A01Z&ske=2025-10-31T05%3A36%3A01Z&sks=b&skv=2024-08-04&sig=HmrT/HjNFXrsk4m120Jh%2BHBaoWqYOkBnHgFOhqAIesw%3D&ac=oaivgprodscus2' } ];
 
 /* ---------- ЭЛЕМЕНТЫ UI ---------- */
 const playfield=document.getElementById('playfield');
@@ -117,7 +136,7 @@ const vegCounter=document.getElementById('vegCounter');
 const soundBtn=document.getElementById('soundBtn');
 let fruitScore=0,vegScore=0;
 
-/* ---------- ХЕЛПЕРЫ ГЕОМЕТРИИ ---------- */
+/* ---------- ХЕЛПЕРЫ ---------- */
 const rect=(el)=>el.getBoundingClientRect();
 const intersects=(a,b)=>!(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom);
 const rand=(min,max)=>Math.random()*(max-min)+min;
@@ -134,116 +153,53 @@ function salute(x,y,n=25){
   }
 }
 
-/* Узкая "зона рта" корзины — верхняя часть, где логично засчитывать попадание */
+/* Корзина: зона «рта» */
 function basketMouthRect(basketEl){
   const r=rect(basketEl);
-  const mouthTop = r.top + r.height*0.18;   // чуть ниже верхней кромки
-  const mouthBottom = r.top + r.height*0.52; // середина корзины
+  const mouthTop = r.top + r.height*0.18;
+  const mouthBottom = r.top + r.height*0.52;
   return { left: r.left + r.width*0.15, right: r.right - r.width*0.15, top: mouthTop, bottom: mouthBottom };
 }
 
-/* ---------- SFX: синтез звука ---------- */
+/* ---------- SFX ---------- */
 const SFX = (() => {
   let ctx=null, muted=false, unlocked=false;
-
-  function ensureCtx(){
-    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
-    if(ctx.state === 'suspended') ctx.resume();
-    return ctx;
-  }
-  // Разрешаем аудио первым касанием
-  function unlock(){
-    if(!ctx) ensureCtx();
-    if(!unlocked){
-      const o=ctx.createOscillator(), g=ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      g.gain.value=0; o.start(); o.stop(ctx.currentTime+0.01);
-      unlocked=true;
-    }
-  }
-
-  function envGain(duration=0.2, attack=0.005, decay=0.15, peak=0.8){
-    const c=ensureCtx(), g=c.createGain(), t=c.currentTime;
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(peak, t+attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t+attack+decay);
-    return { g, t };
-  }
-
-  function tone(freq=440, type='sine', dur=0.25, vol=0.8){
-    if(muted) return;
-    const c=ensureCtx();
-    const o=c.createOscillator();
-    const {g,t}=envGain(dur, 0.005, Math.max(0.05, dur-0.01), vol);
-    o.type=type; o.frequency.value=freq;
-    o.connect(g); g.connect(c.destination);
-    o.start(t); o.stop(t+dur);
-  }
-
-  function chord(freqs=[440,660], dur=0.28, type='sine'){
-    if(muted) return;
-    const c=ensureCtx();
-    const {g,t}=envGain(dur, 0.005, dur-0.01, 0.9);
-    g.connect(c.destination);
-    freqs.forEach((f,i)=>{
-      const o=c.createOscillator();
-      o.type=type; o.frequency.setValueAtTime(f, t);
-      // лёгкий арпеджио для приятности
-      const start = t + i*0.03;
-      o.connect(g); o.start(start); o.stop(start+dur);
-    });
-  }
-
-  function noise(type='white', dur=0.2, vol=0.6, filterFreq=1200){
-    if(muted) return;
-    const c=ensureCtx();
-    const buf=c.createBuffer(1, c.sampleRate*dur, c.sampleRate);
-    const data=buf.getChannelData(0);
-    for(let i=0;i<data.length;i++){
-      const r = Math.random()*2-1;
-      data[i] = (type==='white') ? r : (type==='pink' ? (data[i-1]||0)*0.97 + r*0.03 : r);
-    }
-    const src=c.createBufferSource(); src.buffer=buf;
-    const filt=c.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=filterFreq;
-    const {g,t}=envGain(dur, 0.005, dur-0.01, vol);
-    src.connect(filt); filt.connect(g); g.connect(c.destination);
-    src.start(t);
-  }
-
+  function ensureCtx(){ if(!ctx) ctx=new (window.AudioContext||window.webkitAudioContext)(); if(ctx.state==='suspended') ctx.resume(); return ctx; }
+  function unlock(){ if(!ctx) ensureCtx(); if(!unlocked){ const o=ctx.createOscillator(), g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); g.gain.value=0; o.start(); o.stop(ctx.currentTime+0.01); unlocked=true; } }
+  function envGain(d=0.2,a=0.005,dec=0.15,peak=0.8){ const c=ensureCtx(), g=c.createGain(), t=c.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(peak,t+a); g.gain.exponentialRampToValueAtTime(0.0001,t+a+dec); return {g,t,c}; }
+  function tone(freq=440,type='sine',dur=0.25,vol=0.8){ if(muted) return; const {g,t,c}=envGain(dur,0.005,Math.max(0.05,dur-0.01),vol); const o=c.createOscillator(); o.type=type; o.frequency.value=freq; o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+dur); }
+  function chord(freqs=[440,660],dur=0.28,type='sine'){ if(muted) return; const {g,t,c}=envGain(dur,0.005,dur-0.01,0.9); g.connect(c.destination); freqs.forEach((f,i)=>{ const o=c.createOscillator(); o.type=type; o.frequency.setValueAtTime(f,t); const start=t+i*0.03; o.connect(g); o.start(start); o.stop(start+dur); }); }
+  function noise(kind='white',dur=0.2,vol=0.6,ff=1200){ if(muted) return; const c=ensureCtx(); const buf=c.createBuffer(1,c.sampleRate*dur,c.sampleRate), data=buf.getChannelData(0); for(let i=0;i<data.length;i++){ const r=Math.random()*2-1; data[i]=(kind==='white')?r:((data[i-1]||0)*0.97 + r*0.03); } const src=c.createBufferSource(); src.buffer=buf; const filt=c.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=ff; const {g,t}=envGain(dur,0.005,dur-0.01,vol); src.connect(filt); filt.connect(g); g.connect(c.destination); src.start(t); }
   return {
     toggle(){ muted=!muted; return !muted; },
     isMuted(){ return muted; },
     unlock,
     play(name){
       switch(name){
-        case 'grab': tone(220,'triangle',0.08,0.5); break; // короткий щелчок
-        case 'whoosh': noise('white',0.18,0.5,1800); break; // фжух
-        case 'ok': chord([880,1320,1760],0.22,'sine'); break; // «динь-динь»
-        case 'fail': 
-          // низкий «бррр»: разомкнутый детюн, + короткий шум
-          const c=ensureCtx();
-          const o1=c.createOscillator(), o2=c.createOscillator(), g=c.createGain();
-          o1.type='square'; o2.type='square';
-          o1.frequency.value=160; o2.frequency.value=155;
-          g.gain.value=0; g.gain.setValueAtTime(0, c.currentTime);
-          g.gain.linearRampToValueAtTime(0.7, c.currentTime+0.01);
-          g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime+0.22);
+        case 'grab': tone(220,'triangle',0.08,0.5); break;
+        case 'whoosh': noise('white',0.18,0.5,1800); break;
+        case 'ok': chord([880,1320,1760],0.22,'sine'); break;
+        case 'fail': {
+          const {g,t,c}=envGain(0.23,0.005,0.22,0.7);
+          const o1=c.createOscillator(), o2=c.createOscillator();
+          o1.type=o2.type='square'; o1.frequency.value=160; o2.frequency.value=155;
           o1.connect(g); o2.connect(g); g.connect(c.destination);
-          o1.start(); o2.start(); o1.stop(c.currentTime+0.23); o2.stop(c.currentTime+0.23);
+          o1.start(t); o2.start(t); o1.stop(t+0.23); o2.stop(t+0.23);
           noise('white',0.07,0.35,900);
           break;
-        case 'pop': tone(700,'sine',0.07,0.6); break; // крошечный поп
+        }
+        case 'pop': tone(700,'sine',0.07,0.6); break;
       }
     }
   }
 })();
 
-/* ---------- ДРАГГЕБЛЫ ---------- */
+/* ---------- ДРАГ ---------- */
 function makeDraggable(el,type){
   let dragging=false;
   el.addEventListener('pointerdown',e=>{
     SFX.unlock(); SFX.play('grab');
-    dragging=true;el.setPointerCapture(e.pointerId);
+    dragging=true; el.setPointerCapture(e.pointerId);
     el.classList.add('dragging');
   });
   el.addEventListener('pointermove',e=>{
@@ -253,7 +209,7 @@ function makeDraggable(el,type){
     el.style.top =(e.clientY-pf.top -el.offsetHeight/2)+'px';
   });
   el.addEventListener('pointerup',e=>{
-    dragging=false;el.releasePointerCapture(e.pointerId);
+    dragging=false; el.releasePointerCapture(e.pointerId);
     el.classList.remove('dragging');
 
     const rItem=rect(el);
@@ -267,20 +223,18 @@ function makeDraggable(el,type){
     if(hit){
       const ok=hit.dataset.accept===type;
       if(ok){
-        SFX.play('ok');
-        SFX.play('whoosh');
+        SFX.play('ok'); SFX.play('whoosh');
         salute(e.clientX,e.clientY);
         el.remove();
-        if(type==='fruit'){fruitScore++;fruitCounter.textContent=fruitScore;}
-        else{vegScore++;vegCounter.textContent=vegScore;}
+        if(type==='fruit'){ fruitScore++; fruitCounter.textContent=fruitScore; }
+        else{ vegScore++; vegCounter.textContent=vegScore; }
+        checkWin(); // ← проверяем победу сразу после удаления
       }else{
         SFX.play('fail');
-        // Небольшой «бумп» предмета и «шевеление» корзины
         el.animate([{transform:'translateY(-10px)'},{transform:'translateY(0)'}],{duration:150});
         hit.animate([{transform:'translateX(0)'},{transform:'translateX(-6px)'},{transform:'translateX(6px)'},{transform:'translateX(0)'}],{duration:200});
       }
     }else{
-      // отпустил мимо всего — маленький поп
       SFX.play('pop');
     }
   });
@@ -292,7 +246,7 @@ function init(){
   ITEMS.forEach(it=>{
     const el=document.createElement('div');
     el.className='item';
-    const img=document.createElement('img');img.src=it.img;img.alt=it.name;
+    const img=document.createElement('img'); img.src=it.img; img.alt=it.name;
     el.appendChild(img);
     el.style.left=rand(20,pf.width-100)+'px';
     el.style.top =rand(20,pf.height-150)+'px';
@@ -302,23 +256,20 @@ function init(){
 }
 init();
 
+/* ---------- ЗВУК: PNG-иконки ---------- */
 // ВСТАВЬ СВОИ ССЫЛКИ
 const SOUND_ON_IMG  = 'https://videos.openai.com/az/vg-assets/task_01k8bkpyymet185tx1vc4ytejy%2F1761326392_img_0.webp?se=2025-10-30T17%3A24%3A19Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T16%3A54%3A40Z&ske=2025-10-31T16%3A59%3A40Z&sks=b&skv=2024-08-04&sig=t%2BIOUvJeqixJD8sYhBEvl8So6p4BO5OgXKfXfSsjjxQ%3D&ac=oaivgprodscus2';
 const SOUND_OFF_IMG = 'https://videos.openai.com/az/vg-assets/task_01k8bm1ryzec58nqsgbqecd9h2%2F1761326774_img_0.webp?se=2025-10-30T17%3A27%3A27Z&sp=r&sv=2024-08-04&sr=b&skoid=8ebb0df1-a278-4e2e-9c20-f2d373479b3a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T16%3A54%3A48Z&ske=2025-10-31T16%3A59%3A48Z&sks=b&skv=2024-08-04&sig=rrGNJb8djIEWLT/6LzV34vpLiBY2Ej8Cv1btaZb5avY%3D&ac=oaivgprodscus2';
 
 const soundIcon = document.getElementById('soundIcon');
-
-function updateSoundIcon() {
+function updateSoundIcon(){
   const on = !SFX.isMuted();
   soundIcon.src = on ? SOUND_ON_IMG : SOUND_OFF_IMG;
   soundIcon.alt = on ? 'Звук включен' : 'Звук выключен';
   soundBtn.setAttribute('aria-pressed', (!on).toString());
 }
-
-// при старте страницы установить иконку
 updateSoundIcon();
 
-// единственный обработчик — переключаем звук + иконку
 soundBtn.addEventListener('click', ()=>{
   const on = SFX.toggle();
   soundIcon.src = on ? SOUND_ON_IMG : SOUND_OFF_IMG;
@@ -326,6 +277,35 @@ soundBtn.addEventListener('click', ()=>{
   soundBtn.setAttribute('aria-pressed', (!on).toString());
 });
 
+/* ---------- ФИНАЛЬНОЕ ОКНО ---------- */
+const winScreen = document.getElementById('winScreen');
+const restartBtn = document.getElementById('restartBtn');
+
+function showWinScreen(){
+  winScreen.style.display = 'flex';
+  for (let i=0;i<12;i++){
+    setTimeout(()=>{
+      salute(window.innerWidth/2, window.innerHeight/2, 40);
+      SFX.play('ok');
+    }, i*300);
+  }
+}
+
+function checkWin(){
+  const remaining = document.querySelectorAll('.item').length;
+  if (remaining === 0){
+    setTimeout(showWinScreen, 500);
+  }
+}
+
+restartBtn.addEventListener('click', ()=>{
+  winScreen.style.display = 'none';
+  fruitScore = vegScore = 0;
+  fruitCounter.textContent = '0';
+  vegCounter.textContent = '0';
+  playfield.innerHTML = '';
+  init();
+});
 </script>
 </body>
 </html>
